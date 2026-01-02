@@ -1,29 +1,23 @@
 
-import { GoogleGenAI, Modality, GenerateContentResponse } from "@google/genai";
+import { GoogleGenAI, Modality } from "@google/genai";
 
-// Initialize GoogleGenAI with process.env.API_KEY directly as per guidelines
-const getAI = () => new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Initialize the Gemini API client using the API key from environment variables
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-export const chatWithGemini = async (message: string, history: { role: 'user' | 'model', parts: { text: string }[] }[]) => {
-  const ai = getAI();
+// Fix: Updated chatWithGemini to accept prompt and history, and use the correct generateContent API
+export const chatWithGemini = async (prompt: string, history: any[] = []) => {
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: [
-      ...history,
-      { role: 'user', parts: [{ text: message }] }
-    ],
-    config: {
-      systemInstruction: "你是一个专业的中文AI助手，名字叫'智绘空间'。你的回答应当得体、精准、充满创意，并始终使用简体中文与用户交流。",
-    },
+    contents: [...history, { role: 'user', parts: [{ text: prompt }] }],
   });
   return response;
 };
 
-export const searchWithGemini = async (query: string) => {
-  const ai = getAI();
+// Fix: Updated searchWithGemini to accept prompt and enable Google Search grounding
+export const searchWithGemini = async (prompt: string) => {
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: query,
+    contents: prompt,
     config: {
       tools: [{ googleSearch: {} }],
     },
@@ -31,21 +25,17 @@ export const searchWithGemini = async (query: string) => {
   return response;
 };
 
+// Fix: Updated generateImage to accept prompt and use gemini-2.5-flash-image for generation
 export const generateImage = async (prompt: string) => {
-  const ai = getAI();
   const response = await ai.models.generateContent({
     model: 'gemini-2.5-flash-image',
     contents: {
-      parts: [{ text: `Generate a high quality, creative image based on: ${prompt}. Style: aesthetic, modern.` }]
+      parts: [{ text: prompt }],
     },
-    config: {
-      imageConfig: {
-        aspectRatio: "1:1"
-      }
-    }
   });
 
-  for (const part of response.candidates[0].content.parts) {
+  // Iterate through parts to find the generated image data
+  for (const part of response.candidates?.[0]?.content?.parts || []) {
     if (part.inlineData) {
       return `data:image/png;base64,${part.inlineData.data}`;
     }
@@ -53,11 +43,11 @@ export const generateImage = async (prompt: string) => {
   return null;
 };
 
+// Fix: Updated textToSpeech to accept text and return base64 audio data using the TTS model
 export const textToSpeech = async (text: string) => {
-  const ai = getAI();
   const response = await ai.models.generateContent({
     model: "gemini-2.5-flash-preview-tts",
-    contents: [{ parts: [{ text: `请用悦耳、亲切的中文朗读以下内容：${text}` }] }],
+    contents: [{ parts: [{ text }] }],
     config: {
       responseModalities: [Modality.AUDIO],
       speechConfig: {
@@ -67,12 +57,10 @@ export const textToSpeech = async (text: string) => {
       },
     },
   });
-
-  const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-  return base64Audio;
+  return response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
 };
 
-// Audio decoding helper
+// Fix: Manual base64 decoding implementation as required by guidelines
 export const decodeAudio = (base64: string) => {
   const binaryString = atob(base64);
   const len = binaryString.length;
@@ -83,13 +71,11 @@ export const decodeAudio = (base64: string) => {
   return bytes;
 };
 
-export const pcmToAudioBuffer = async (
-  data: Uint8Array,
-  ctx: AudioContext,
-  sampleRate: number = 24000,
-  numChannels: number = 1
-): Promise<AudioBuffer> => {
+// Fix: Convert raw PCM audio data to AudioBuffer for web audio playback
+export const pcmToAudioBuffer = async (data: Uint8Array, ctx: AudioContext) => {
   const dataInt16 = new Int16Array(data.buffer);
+  const numChannels = 1;
+  const sampleRate = 24000; // Matches model output rate
   const frameCount = dataInt16.length / numChannels;
   const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
 
